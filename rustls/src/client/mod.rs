@@ -2,6 +2,7 @@ use crate::anchors;
 use crate::error::TLSError;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
+use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::CipherSuite;
@@ -14,7 +15,6 @@ use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
 use std::fmt;
@@ -442,7 +442,11 @@ impl ClientSessionImpl {
     }
 
     pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
-        self.config.ciphersuites.iter().copied().find(|&scs| scs.suite == suite)
+        self.config
+            .ciphersuites
+            .iter()
+            .copied()
+            .find(|&scs| scs.suite == suite)
     }
 
     pub fn wants_read(&self) -> bool {

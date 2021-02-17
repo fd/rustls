@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -8,17 +9,16 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::{DecomposedSignatureScheme, SCTList, CertificatePayload};
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::ServerKeyExchangePayload;
+use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::session::SessionSecrets;
-use crate::SupportedCipherSuite;
-use crate::kx;
 use crate::ticketer;
 use crate::verify;
+use crate::SupportedCipherSuite;
 
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{HandshakeDetails, ServerCertDetails, ServerKXDetails};
@@ -36,7 +36,10 @@ pub struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn into_expect_certificate_status_or_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
+    fn into_expect_certificate_status_or_server_kx(
+        self,
+        server_cert_chain: CertificatePayload,
+    ) -> hs::NextState {
         Box::new(ExpectCertificateStatusOrServerKX {
             handshake: self.handshake,
             suite: self.suite,
@@ -47,8 +50,8 @@ impl ExpectCertificate {
     }
 
     fn into_expect_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            server_cert_chain, vec![], self.server_cert_sct_list);
+        let server_cert =
+            ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
 
         Box::new(ExpectServerKX {
             handshake: self.handshake,
@@ -93,7 +96,10 @@ struct ExpectCertificateStatus {
 impl ExpectCertificateStatus {
     fn into_expect_server_kx(self, server_ocsp_response: Vec<u8>) -> hs::NextState {
         let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, server_ocsp_response, self.server_cert_sct_list);
+            self.server_cert_chain,
+            server_ocsp_response,
+            self.server_cert_sct_list,
+        );
 
         Box::new(ExpectServerKX {
             handshake: self.handshake,
@@ -138,8 +144,8 @@ struct ExpectCertificateStatusOrServerKX {
 
 impl ExpectCertificateStatusOrServerKX {
     fn into_expect_server_kx(self) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, vec![], self.server_cert_sct_list);
+        let server_cert =
+            ServerCertDetails::new(self.server_cert_chain, vec![], self.server_cert_sct_list);
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             suite: self.suite,
@@ -213,7 +219,8 @@ impl hs::State for ExpectServerKX {
             .transcript
             .add_message(&m);
 
-        let decoded_kx = opaque_kx.unwrap_given_kxa(&self.suite.kx)
+        let decoded_kx = opaque_kx
+            .unwrap_given_kxa(&self.suite.kx)
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecodeError);
@@ -291,10 +298,8 @@ fn emit_certverify(
                 .transcript
                 .abandon_client_auth();
             return Ok(());
-        },
-        Some(signer) => {
-            signer
         }
+        Some(signer) => signer,
     };
 
     let message = handshake

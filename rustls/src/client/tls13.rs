@@ -1,11 +1,11 @@
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
 };
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -25,9 +25,9 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign;
-use crate::kx;
 use crate::ticketer;
 use crate::verify;
+use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{msgs::base::PayloadU16, quic, session::Protocol};
 
@@ -36,8 +36,8 @@ use crate::client::common::{HandshakeDetails, ServerCertDetails};
 use crate::client::hs;
 
 use ring::constant_time;
-use webpki;
 use ring::digest::Digest;
+use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -105,16 +105,14 @@ pub fn choose_kx_groups(
     // - if not, send just the first configured group.
     //
     let group = retryreq
-        .and_then(|req| {
-            HelloRetryRequest::get_requested_key_share_group(req)
-        })
+        .and_then(|req| HelloRetryRequest::get_requested_key_share_group(req))
         .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
         .unwrap_or_else(|| {
-                sess.config
-                    .kx_groups
-                    .get(0)
-                    .expect("No kx groups configured")
-                    .name
+            sess.config
+                .kx_groups
+                .get(0)
+                .expect("No kx groups configured")
+                .name
         });
 
     let mut key_shares = vec![];
@@ -129,7 +127,9 @@ pub fn choose_kx_groups(
         hello
             .offered_key_shares
             .push(already_offered_share);
-    } else if let Some(key_share) = kx::KeyExchange::choose(group, &sess.config.kx_groups).and_then(kx::KeyExchange::start) {
+    } else if let Some(key_share) =
+        kx::KeyExchange::choose(group, &sess.config.kx_groups).and_then(kx::KeyExchange::start)
+    {
         key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
         hello.offered_key_shares.push(key_share);
     }
@@ -322,7 +322,7 @@ pub fn prepare_resumption(
     //
     // Include an empty binder. It gets filled in below because it depends on
     // the message it's contained in (!!!).
-    let obfuscated_ticket_age= resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
+    let obfuscated_ticket_age = resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
 
     let binder_len = resuming_suite.get_hash().output_len;
     let binder = vec![0u8; binder_len];
@@ -545,7 +545,8 @@ impl hs::State for ExpectCertificate {
         let server_cert = ServerCertDetails::new(
             cert_chain.convert(),
             cert_chain.get_end_entity_ocsp(),
-            cert_chain.get_end_entity_scts());
+            cert_chain.get_end_entity_scts(),
+        );
 
         if let Some(sct_list) = server_cert.scts.as_ref() {
             if hs::sct_list_is_invalid(sct_list) {
@@ -858,7 +859,7 @@ fn emit_certverify_tls13(
         None => {
             debug!("Skipping certverify message (no client scheme/key)");
             return Ok(());
-        } 
+        }
     };
 
     let message =

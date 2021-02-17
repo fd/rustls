@@ -1,4 +1,5 @@
 use crate::hash_hs;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::ExtensionType;
@@ -11,7 +12,6 @@ use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::session::SessionRandoms;
 use crate::sign;
-use crate::kx;
 use webpki;
 
 use std::mem;
@@ -23,9 +23,11 @@ pub struct ServerCertDetails {
 }
 
 impl ServerCertDetails {
-    pub fn new(cert_chain: CertificatePayload,
-               ocsp_response: Vec<u8>,
-               scts: Option<SCTList>) -> ServerCertDetails {
+    pub fn new(
+        cert_chain: CertificatePayload,
+        ocsp_response: Vec<u8>,
+        scts: Option<SCTList>,
+    ) -> ServerCertDetails {
         ServerCertDetails {
             cert_chain,
             ocsp_response,

@@ -1,7 +1,6 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
@@ -27,13 +26,14 @@ use crate::rand;
 use crate::session::SessionSecrets;
 use crate::ticketer;
 use crate::verify;
+use crate::{cipher, SupportedCipherSuite};
 
-use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::common::HandshakeDetails;
+use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
-use webpki;
 use ring::digest::Digest;
+use webpki;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
@@ -90,8 +90,7 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    let result = persist::ClientSessionValue::read(
-        &mut reader, &sess.config.ciphersuites);
+    let result = persist::ClientSessionValue::read(&mut reader, &sess.config.ciphersuites);
     if let Some(result) = result {
         if result.has_expired(ticketer::timebase()) {
             None
@@ -176,7 +175,8 @@ impl InitialState {
             sent_tls13_fake_ccs,
             hello_details,
             None,
-            self.extra_exts)
+            self.extra_exts,
+        )
     }
 }
 
@@ -200,13 +200,10 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-pub fn compatible_suite(
-    sess: &ClientSessionImpl,
-    resuming_suite: &SupportedCipherSuite,
-) -> bool {
+pub fn compatible_suite(sess: &ClientSessionImpl, resuming_suite: &SupportedCipherSuite) -> bool {
     match sess.common.get_suite() {
         Some(suite) => suite.can_resume_to(&resuming_suite),
-        None => true
+        None => true,
     }
 }
 
@@ -220,15 +217,9 @@ fn emit_client_hello_for_retry(
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
-        (
-            resuming.ticket.0.clone(),
-            resuming.version,
-        )
+        (resuming.ticket.0.clone(), resuming.version)
     } else {
-        (
-            Vec::new(),
-            ProtocolVersion::Unknown(0),
-        )
+        (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
     let support_tls12 = sess
@@ -258,10 +249,11 @@ fn emit_client_hello_for_retry(
         ECPointFormatList::supported(),
     ));
     exts.push(ClientExtension::NamedGroups(
-        sess.config.kx_groups
+        sess.config
+            .kx_groups
             .iter()
             .map(|skxg| skxg.name)
-            .collect()
+            .collect(),
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
         sess.config
@@ -437,9 +429,10 @@ pub fn process_alpn_protocol(
         if !sess
             .config
             .alpn_protocols
-            .contains(alpn_protocol) {
-                return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
-            }
+            .contains(alpn_protocol)
+        {
+            return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
+        }
     }
 
     debug!(
@@ -505,9 +498,8 @@ impl ExpectServerHello {
         suite: &'static SupportedCipherSuite,
         may_send_cert_status: bool,
         must_issue_new_ticket: bool,
-        server_cert_sct_list: Option<SCTList>)
-        -> NextState
-    {
+        server_cert_sct_list: Option<SCTList>,
+    ) -> NextState {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             suite,
@@ -536,9 +528,7 @@ impl State for ExpectServerHello {
         };
 
         let version = match server_version {
-            TLSv1_3 if tls13_supported => {
-                TLSv1_3
-            },
+            TLSv1_3 if tls13_supported => TLSv1_3,
             TLSv1_2 if sess.config.supports_version(TLSv1_2) => {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
@@ -612,12 +602,12 @@ impl State for ExpectServerHello {
             }
         }
 
-        let scs = sess.find_cipher_suite(server_hello.cipher_suite)
+        let scs = sess
+            .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                TLSError::PeerMisbehavedError(
-                    "server chose non-offered ciphersuite".to_string())
+                TLSError::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
             })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
@@ -625,8 +615,7 @@ impl State for ExpectServerHello {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
-        if !scs.usable_for_version(version)
-        {
+        if !scs.usable_for_version(version) {
             return Err(illegal_param(
                 sess,
                 "server chose unusable ciphersuite for version",
@@ -654,7 +643,10 @@ impl State for ExpectServerHello {
                 &mut self.hello,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
-            return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
+            return Ok(self.into_expect_tls13_encrypted_extensions(
+                key_schedule,
+                hash_at_client_recvd_server_hello,
+            ));
         }
 
         // TLS1.2 only from here-on
@@ -704,8 +696,7 @@ impl State for ExpectServerHello {
         }
 
         // Save any sent SCTs for verification against the certificate.
-        let server_cert_list_list =
-            if let Some(sct_list) = server_hello.get_sct_list() {
+        let server_cert_list_list = if let Some(sct_list) = server_hello.get_sct_list() {
             debug!("Server sent {:?} SCTs", sct_list.len());
 
             if sct_list_is_invalid(sct_list) {
@@ -761,7 +752,12 @@ impl State for ExpectServerHello {
             }
         }
 
-        Ok(self.into_expect_tls12_certificate(scs, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
+        Ok(self.into_expect_tls12_certificate(
+            scs,
+            may_send_cert_status,
+            must_issue_new_ticket,
+            server_cert_list_list,
+        ))
     }
 }
 
@@ -799,7 +795,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks for us to retry on an unsupported group.
         if let Some(group) = req_group {
-            if sess.config.kx_groups.iter().find(|skxg| skxg.name == group).is_none() {
+            if sess
+                .config
+                .kx_groups
+                .iter()
+                .find(|skxg| skxg.name == group)
+                .is_none()
+            {
                 return Err(illegal_param(sess, "server requested hrr with bad group"));
             }
         }

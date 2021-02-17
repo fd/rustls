@@ -244,9 +244,9 @@ mod bs_debug;
 mod client;
 mod key;
 mod keylog;
+mod kx;
 mod server;
 mod suites;
-mod kx;
 mod ticketer;
 
 /// Internal classes which may be useful outside the library.
@@ -268,6 +268,7 @@ pub use crate::error::TLSError;
 pub use crate::error::WebPKIOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
+pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
@@ -279,7 +280,6 @@ pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::session::Session;
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
-pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,

@@ -2572,9 +2572,14 @@ mod test_quic {
         let server_params = &b"server params"[..];
 
         // full handshake
-        let mut client =
-            ClientSession::new_quic(&client_config, quic::Version::V1, dns_name("localhost"), client_params.into());
-        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
+        let mut client = ClientSession::new_quic(
+            &client_config,
+            quic::Version::V1,
+            dns_name("localhost"),
+            client_params.into(),
+        );
+        let mut server =
+            ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
         assert!(client.get_0rtt_keys().is_none());
@@ -2612,14 +2617,19 @@ mod test_quic {
         );
 
         // 0-RTT handshake
-        let mut client =
-            ClientSession::new_quic(&client_config, quic::Version::V1, dns_name("localhost"), client_params.into());
+        let mut client = ClientSession::new_quic(
+            &client_config,
+            quic::Version::V1,
+            dns_name("localhost"),
+            client_params.into(),
+        );
         assert!(
             client
                 .get_negotiated_ciphersuite()
                 .is_some()
         );
-        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
+        let mut server =
+            ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         step(&mut client, &mut server).unwrap();
         assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
         {
@@ -2648,7 +2658,8 @@ mod test_quic {
                 dns_name("localhost"),
                 client_params.into(),
             );
-            let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
+            let mut server =
+                ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
             step(&mut client, &mut server).unwrap();
             assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
             assert!(client.get_0rtt_keys().is_some());
@@ -2672,7 +2683,8 @@ mod test_quic {
             dns_name("example.com"),
             client_params.into(),
         );
-        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
+        let mut server =
+            ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         step(&mut client, &mut server).unwrap();
         step(&mut server, &mut client)
             .unwrap()
@@ -2706,7 +2718,8 @@ mod test_quic {
                 dns_name("localhost"),
                 client_params.into(),
             );
-            let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
+            let mut server =
+                ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
 
             assert_eq!(
                 step(&mut client, &mut server)
@@ -2781,9 +2794,9 @@ fn test_client_does_not_offer_sha1() {
 #[test]
 fn test_client_config_keyshare() {
     let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
+    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
     let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
+    server_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
 }
@@ -2791,9 +2804,9 @@ fn test_client_config_keyshare() {
 #[test]
 fn test_client_config_keyshare_mismatch() {
     let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
+    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
     let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups= vec![ &rustls::kx_group::X25519 ];
+    server_config.kx_groups = vec![&rustls::kx_group::X25519];
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
@@ -2802,19 +2815,14 @@ fn test_client_config_keyshare_mismatch() {
 fn test_client_sends_helloretryrequest() {
     // client sends a secp384r1 key share
     let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![
-        &rustls::kx_group::SECP384R1,
-        &rustls::kx_group::X25519,
-    ];
+    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1, &rustls::kx_group::X25519];
 
     let storage = Arc::new(ClientStorage::new());
     client_config.session_persistence = storage.clone();
 
     // but server only accepts x25519, so a HRR is required
     let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups = vec![
-        &rustls::kx_group::X25519
-    ];
+    server_config.kx_groups = vec![&rustls::kx_group::X25519];
 
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);

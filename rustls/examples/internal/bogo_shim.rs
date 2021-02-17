@@ -306,7 +306,7 @@ fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
 }
 
 fn lookup_kx_group(group: u16) -> &'static rustls::SupportedKxGroup {
-    match group   {
+    match group {
         0x001d => &rustls::kx_group::X25519,
         0x0017 => &rustls::kx_group::SECP256R1,
         0x0018 => &rustls::kx_group::SECP384R1,

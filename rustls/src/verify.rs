@@ -336,9 +336,13 @@ fn prepare<'a, 'b>(
     roots: &'b RootCertStore,
 ) -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&end_entity.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&end_entity.0)
+        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
-    let intermediates: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
+    let intermediates: Vec<&'a [u8]> = intermediates
+        .iter()
+        .map(|cert| cert.0.as_ref())
+        .collect();
 
     let trustroots: Vec<webpki::TrustAnchor> = roots
         .roots
@@ -434,7 +438,8 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         sni: Option<&webpki::DNSName>,
     ) -> Option<DistinguishedNames> {
-        self.inner.client_auth_root_subjects(sni)
+        self.inner
+            .client_auth_root_subjects(sni)
     }
 
     fn verify_client_cert(
@@ -544,7 +549,8 @@ fn verify_signed_struct(
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, TLSError> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&cert.0)
+        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
         .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::VerifySignature))
@@ -580,7 +586,10 @@ pub fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8>
     construct_tls13_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
 }
 
-fn construct_tls13_verify_message(handshake_hash: &Digest, context_string_with_0: &[u8]) -> Vec<u8> {
+fn construct_tls13_verify_message(
+    handshake_hash: &Digest,
+    context_string_with_0: &[u8],
+) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
     msg.extend_from_slice(context_string_with_0);
@@ -596,7 +605,8 @@ fn verify_tls13(
     let alg = convert_alg_tls13(dss.scheme)?;
 
 
-    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&cert.0)
+        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, &msg, &dss.sig.0)
         .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::VerifySignature))
@@ -604,8 +614,7 @@ fn verify_tls13(
 }
 
 fn unix_time_millis(now: SystemTime) -> Result<u64, TLSError> {
-    now
-        .duration_since(std::time::UNIX_EPOCH)
+    now.duration_since(std::time::UNIX_EPOCH)
         .map(|dur| dur.as_secs())
         .map_err(|_| TLSError::FailedToGetCurrentTime)
         .and_then(|secs| {
@@ -614,7 +623,12 @@ fn unix_time_millis(now: SystemTime) -> Result<u64, TLSError> {
         })
 }
 
-pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TLSError> {
+pub fn verify_scts(
+    cert: &Certificate,
+    now: SystemTime,
+    scts: &SCTList,
+    logs: &[&sct::Log],
+) -> Result<(), TLSError> {
     let mut valid_scts = 0;
     let now = unix_time_millis(now)?;
     let mut last_sct_error = None;

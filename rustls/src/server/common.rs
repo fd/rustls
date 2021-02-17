@@ -1,11 +1,11 @@
 use crate::hash_hs;
 use crate::key;
+use crate::kx;
 use crate::msgs::handshake::{ServerExtension, SessionID};
 use crate::session::SessionRandoms;
-use crate::kx;
 
-use std::mem;
 use ring::digest;
+use std::mem;
 
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,

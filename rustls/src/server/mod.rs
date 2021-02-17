@@ -1,6 +1,7 @@
 use crate::error::TLSError;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
+use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::ContentType;
@@ -11,7 +12,6 @@ use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
 use webpki;
