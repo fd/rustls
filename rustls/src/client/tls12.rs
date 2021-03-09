@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::client::ClientSessionImpl;
 use crate::error::TlsError;
+use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -213,7 +214,7 @@ impl hs::State for ExpectServerKX {
 }
 
 fn emit_certificate(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) {
@@ -228,12 +229,12 @@ fn emit_certificate(
         }),
     };
 
-    handshake.transcript.add_message(&cert);
+    transcript.add_message(&cert);
     sess.common.send_msg(cert, false);
 }
 
 fn emit_clientkx(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     sess: &mut ClientSessionImpl,
     kxd: &kx::KeyExchangeResult,
 ) {
@@ -251,20 +252,19 @@ fn emit_clientkx(
         }),
     };
 
-    handshake.transcript.add_message(&ckx);
+    transcript.add_message(&ckx);
     sess.common.send_msg(ckx, false);
 }
 
 fn emit_certverify(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TlsError> {
     let signer = match client_auth.signer.take() {
         None => {
             trace!("Not sending CertificateVerify, no key");
-            handshake
-                .transcript
+            transcript
                 .abandon_client_auth();
             return Ok(());
         },
@@ -273,8 +273,7 @@ fn emit_certverify(
         }
     };
 
-    let message = handshake
-        .transcript
+    let message = transcript
         .take_handshake_buf();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -289,7 +288,7 @@ fn emit_certverify(
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, false);
     Ok(())
 }
@@ -306,10 +305,10 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 
 fn emit_finished(
     secrets: &SessionSecrets,
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     sess: &mut ClientSessionImpl,
 ) {
-    let vh = handshake.transcript.get_current_hash();
+    let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -322,7 +321,7 @@ fn emit_finished(
         }),
     };
 
-    handshake.transcript.add_message(&f);
+    transcript.add_message(&f);
     sess.common.send_msg(f, true);
 }
 
@@ -534,7 +533,7 @@ impl hs::State for ExpectServerDone {
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate(&mut st.handshake, client_auth, sess);
+            emit_certificate(&mut st.handshake.transcript, client_auth, sess);
         }
 
         // 5a.
@@ -542,7 +541,7 @@ impl hs::State for ExpectServerDone {
             .ok_or_else(|| TlsError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
-        emit_clientkx(&mut st.handshake, sess, &kxd);
+        emit_clientkx(&mut st.handshake.transcript, sess, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let handshake_hash = st
             .handshake
@@ -551,7 +550,7 @@ impl hs::State for ExpectServerDone {
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.handshake, client_auth, sess)?;
+            emit_certverify(&mut st.handshake.transcript, client_auth, sess)?;
         }
 
         // 5d.
@@ -580,7 +579,7 @@ impl hs::State for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.handshake, sess);
+        emit_finished(&secrets, &mut st.handshake.transcript, sess);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -765,7 +764,7 @@ impl hs::State for ExpectFinished {
             sess.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.handshake, sess);
+            emit_finished(&st.secrets, &mut st.handshake.transcript, sess);
         }
 
         sess.common.start_traffic();
