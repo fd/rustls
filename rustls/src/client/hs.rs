@@ -315,7 +315,13 @@ fn emit_client_hello_for_retry(
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
-        tls13::prepare_resumption(sess, ticket, &handshake, &mut exts, retryreq.is_some())
+        match handshake.resuming_session.as_ref() {
+            Some(resuming) if compatible_suite(sess, resuming.suite) => {
+                tls13::prepare_resumption(sess, ticket, resuming, &mut exts, retryreq.is_some());
+                true
+            }
+            _ => false,
+        }
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {

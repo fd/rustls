@@ -294,20 +294,11 @@ pub fn start_handshake_traffic(
 pub fn prepare_resumption(
     sess: &mut ClientSessionImpl,
     ticket: Vec<u8>,
-    handshake: &HandshakeDetails,
+    resuming_session: &persist::ClientSessionValue,
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
-) -> bool {
-    let resuming_session = match handshake.resuming_session.as_ref() {
-        Some(resuming_session) => resuming_session,
-        None => {
-            return false;
-        }
-    };
+) {
     let resuming_suite = resuming_session.suite;
-    if !hs::compatible_suite(sess, resuming_session.suite) {
-        return false;
-    };
 
     sess.resumption_ciphersuite = Some(resuming_suite);
     // The EarlyData extension MUST be supplied together with the
@@ -332,8 +323,6 @@ pub fn prepare_resumption(
     let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
     let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
     exts.push(ClientExtension::PresharedKey(psk_ext));
-
-    true
 }
 
 pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSessionImpl) {
