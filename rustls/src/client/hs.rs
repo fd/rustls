@@ -353,7 +353,9 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(&mut handshake, &mut chp))
+        // Must be `Some` if `fill_in_binder` is `true`
+        let resuming = handshake.resuming_session.as_ref().unwrap();
+        Some(tls13::fill_in_psk_binder(&resuming, &handshake.transcript, &mut chp))
     } else {
         None
     };

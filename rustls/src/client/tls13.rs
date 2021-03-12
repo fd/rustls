@@ -2,6 +2,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
+use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
@@ -141,14 +142,11 @@ pub fn choose_kx_groups(
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
-    handshake: &HandshakeDetails,
+    resuming: &persist::ClientSessionValue,
+    transcript: &HandshakeHash,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
-    let resuming = handshake
-        .resuming_session
-        .as_ref()
-        .unwrap();
     let suite = resuming.suite;
     let hkdf_alg = suite.hkdf_algorithm;
     let suite_hash = suite.get_hash();
@@ -156,9 +154,7 @@ pub fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.get_encoding_for_binder_signing();
-    let handshake_hash = handshake
-        .transcript
-        .get_hash_given(suite_hash, &binder_plaintext);
+    let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
