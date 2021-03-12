@@ -321,6 +321,45 @@ pub fn prepare_resumption(
     exts.push(ClientExtension::PresharedKey(psk_ext));
 }
 
+pub fn derive_early_traffic_secret(
+    sess: &mut ClientSessionImpl,
+    resuming_session: &persist::ClientSessionValue,
+    early_key_schedule: &KeyScheduleEarly,
+    sent_tls13_fake_ccs: &mut bool,
+    transcript: &HandshakeHash,
+    client_random: &[u8; 32],
+) {
+    // For middlebox compatibility
+    emit_fake_ccs(sent_tls13_fake_ccs, sess);
+
+    let resuming_suite = resuming_session.suite;
+
+    let client_hello_hash = transcript
+        .get_hash_given(resuming_suite.get_hash(), &[]);
+    let client_early_traffic_secret = early_key_schedule
+        .client_early_traffic_secret(
+            &client_hello_hash,
+            &*sess.config.key_log,
+            client_random,
+        );
+    // Set early data encryption key
+    sess.common
+        .record_layer
+        .set_message_encrypter(cipher::new_tls13_write(
+            resuming_suite,
+            &client_early_traffic_secret,
+        ));
+
+    #[cfg(feature = "quic")]
+    {
+        sess.common.quic.early_secret = Some(client_early_traffic_secret);
+    }
+
+    // Now the client can send encrypted early data
+    sess.common.early_traffic = true;
+    trace!("Starting early data traffic");
+}
+
 pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSessionImpl) {
     if sess.common.is_quic() {
         return;

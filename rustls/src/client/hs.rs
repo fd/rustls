@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
+use crate::SupportedCipherSuite;
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
@@ -353,7 +353,8 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if let Some(resuming) = fill_in_binder {
-        Some(tls13::fill_in_psk_binder(&resuming, &handshake.transcript, &mut chp))
+        let schedule = tls13::fill_in_psk_binder(&resuming, &handshake.transcript, &mut chp);
+        Some((resuming, schedule))
     } else {
         None
     };
@@ -383,40 +384,21 @@ fn emit_client_hello_for_retry(
     sess.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    if let Some(resuming) = fill_in_binder.filter(|_| sess.early_data.is_enabled()) {
-        // For middlebox compatibility
-        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, sess);
-
-        let resuming_suite = resuming.suite;
-
-        let client_hello_hash = handshake
-            .transcript
-            .get_hash_given(resuming_suite.get_hash(), &[]);
-        let client_early_traffic_secret = early_key_schedule
-            .as_ref()
-            .unwrap()
-            .client_early_traffic_secret(
-                &client_hello_hash,
-                &*sess.config.key_log,
-                &randoms.client,
-            );
-        // Set early data encryption key
-        sess.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(
-                resuming_suite,
-                &client_early_traffic_secret,
-            ));
-
-        #[cfg(feature = "quic")]
-        {
-            sess.common.quic.early_secret = Some(client_early_traffic_secret);
+    let early_key_schedule = early_key_schedule.map(|(resuming, schedule)| {
+        if !sess.early_data.is_enabled() {
+            return schedule;
         }
 
-        // Now the client can send encrypted early data
-        sess.common.early_traffic = true;
-        trace!("Starting early data traffic");
-    }
+        tls13::derive_early_traffic_secret(
+            sess,
+            resuming,
+            &schedule,
+            &mut sent_tls13_fake_ccs,
+            &handshake.transcript,
+            &randoms.client,
+        );
+        schedule
+    });
 
     let next = ExpectServerHello {
         handshake,
