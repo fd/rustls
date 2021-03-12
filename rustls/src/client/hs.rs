@@ -318,9 +318,9 @@ fn emit_client_hello_for_retry(
         match handshake.resuming_session.as_ref() {
             Some(resuming) if compatible_suite(sess, resuming.suite) => {
                 tls13::prepare_resumption(sess, ticket, resuming, &mut exts, retryreq.is_some());
-                true
+                Some(resuming)
             }
-            _ => false,
+            _ => None,
         }
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
@@ -329,9 +329,9 @@ fn emit_client_hello_for_retry(
         } else {
             exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
         }
-        false
+        None
     } else {
-        false
+        None
     };
 
     // Note what extensions we sent.
@@ -352,9 +352,7 @@ fn emit_client_hello_for_retry(
         }),
     };
 
-    let early_key_schedule = if fill_in_binder {
-        // Must be `Some` if `fill_in_binder` is `true`
-        let resuming = handshake.resuming_session.as_ref().unwrap();
+    let early_key_schedule = if let Some(resuming) = fill_in_binder {
         Some(tls13::fill_in_psk_binder(&resuming, &handshake.transcript, &mut chp))
     } else {
         None
@@ -385,16 +383,11 @@ fn emit_client_hello_for_retry(
     sess.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    if sess.early_data.is_enabled() {
+    if let Some(resuming) = fill_in_binder.filter(|_| sess.early_data.is_enabled()) {
         // For middlebox compatibility
         tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, sess);
 
-        // It is safe to call unwrap() because fill_in_binder is true.
-        let resuming_suite = handshake
-            .resuming_session
-            .as_ref()
-            .map(|resume| resume.suite)
-            .unwrap();
+        let resuming_suite = resuming.suite;
 
         let client_hello_hash = handshake
             .transcript
